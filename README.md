@@ -11,7 +11,10 @@ that has to be remembered per user, and a condition that decides whether it
 is shown at all.
 
 This is the declaration. You describe the notices once; showing, dismissing
-and remembering are handled, in core's own notice markup.
+and remembering are handled. Each notice is printed by core's
+`wp_admin_notice()`, so it has core's markup and escaping and another plugin's
+`wp_admin_notice_args` / `_markup` filters reach it; remembering a dismissal
+and flashing a message across a redirect are what this adds.
 
 ## Features
 

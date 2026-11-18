@@ -162,6 +162,27 @@ final class NoticesTest extends TestCase {
 	}
 
 	/**
+	 * The markup is core's wp_admin_notice(), so its filters reach it.
+	 */
+	public function test_the_notice_is_printed_by_core(): void {
+		$this->add( [ 'persistent' => true, 'type' => 'warning', 'dismissible' => false ] );
+
+		add_filter(
+			'wp_admin_notice_args',
+			static function ( $args ) {
+				$args['additional_classes'] = [ 'inline' ];
+
+				return $args;
+			}
+		);
+
+		$this->assertSame(
+			'<div class="notice notice-warning inline" data-notice-context="myplugin" data-notice-key="saved"><p>Settings saved.</p></div>',
+			$this->render()
+		);
+	}
+
+	/**
 	 * A type core does not have becomes one it does.
 	 *
 	 * Anything else renders as a notice with no colour, which reads as a

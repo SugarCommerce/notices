@@ -451,13 +451,23 @@ final class Notices {
 	 * @return void
 	 */
 	private static function print( string $context, string $key, string $type, bool $dismissible, string $message ): void {
-		printf(
-			'<div class="notice notice-%s%s" data-notice-context="%s"%s><p>%s</p></div>',
-			esc_attr( $type ),
-			$dismissible ? ' is-dismissible' : '',
-			esc_attr( $context ),
-			'' === $key ? '' : ' data-notice-key="' . esc_attr( $key ) . '"',
-			wp_kses_post( $message )
+		$attributes = array( 'data-notice-context' => $context );
+
+		if ( '' !== $key ) {
+			$attributes['data-notice-key'] = $key;
+		}
+
+		// Core's markup, escaping and wp_kses_post(), and its
+		// wp_admin_notice_args / _markup filters. What it lacks -- a
+		// dismissal remembered, a message flashed across a redirect -- is
+		// what the rest of this class adds.
+		wp_admin_notice(
+			$message,
+			array(
+				'type'        => $type,
+				'dismissible' => $dismissible,
+				'attributes'  => $attributes,
+			)
 		);
 	}
 
