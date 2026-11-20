@@ -116,26 +116,22 @@ Everything is named from the context: the trigger argument
 meta and the transient. Two plugins that each bundle this library and each
 have a `settings_saved` never show each other's.
 
-## Moving from arraypress/wp-*
+## Security
 
-From `arraypress/wp-register-notices` (`ArrayPress\RegisterNotices`). The
-global functions are gone -- a global function is the one thing Strauss
-cannot prefix -- and the trigger argument is named from the context.
+* Forged dismissals: the dismiss request checks its nonce, and only a
+  registered, dismissible notice can be dismissed -- per user, so no request
+  writes meta it was not meant to.
+* Script in a message: every message goes through `wp_admin_notice()`, which
+  runs it through `wp_kses_post()`; the dismiss script's context is a key.
+* Showing a notice by address: the trigger argument can only pick a notice
+  that was declared for it.
+* Another user's flash: a flashed message is kept per user, a minute at most
+  and ten at once.
 
-| Old | New |
-|---|---|
-| `ArrayPress\RegisterNotices\Notices` | `SugarCommerce\Notices\Notices` |
-| `register_admin_notices( $context, $notices )` | `Notices::register( $context, $notices )` |
-| `Notices::add( $context, $key, $config )` | unchanged |
-| `admin_notice_url( $key, $url )`, `Notices::url( $key, $url )` | `Notices::url( $context, $key, $url )` |
-| `?notice=key`, `Notices::TRIGGER` | `?{context}_notice=key`, `Notices::trigger( $context )` |
-| `admin_notice_dismissed( $context, $key )` | `Notices::dismissed( $context, $key )` |
-| `reset_admin_notice( $context, $key, $user_id )` | `Notices::undismiss( $context, $key, $user_id )` |
-| `Notices::removable_query_args()` | internal: the trigger is still removed from the URL |
-| `Notices::applies()`, `render()`, `dismiss()`, `all()` | unchanged |
-| user meta `_dismissed_notice_{context}_{key}`, AJAX `dismiss_notice_{context}` | unchanged |
+## Layout
 
-New: `Notices::flash()` and `Notices::TYPES`.
+* `src/Notices.php`: registering notices and the entry points, with its jobs
+  in `src/Traits/Notices/` (flashing, dismissing, which apply and printing).
 
 ## Requirements
 
