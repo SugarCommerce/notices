@@ -112,7 +112,11 @@ exit;
 ```
 
 Flashed messages show above the declared notices, in the order they were
-left, ten at most.
+left, ten at most. A context that declares no notice of its own -- a settings
+page that only flashes "Settings imported." -- calls
+`Notices::listen( 'myplugin' )` on every admin load, so the screen after the
+redirect prints what is waiting. sugarcommerce/settings' import, export and
+reset messages work this way.
 
 ## Two plugins on one site
 

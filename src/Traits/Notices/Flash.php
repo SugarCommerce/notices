@@ -59,6 +59,28 @@ trait Flash {
 	}
 
 	/**
+	 * Show a context's flashed messages on the next admin screen, for code
+	 * that only ever flashes and declares no notice of its own.
+	 *
+	 * flash() attaches the context on the request that flashes, which is
+	 * usually the one that redirects; the screen after it needs this (or a
+	 * register()) to print what is waiting. Call it on every admin load:
+	 *
+	 *     Notices::listen( 'myplugin' );   // from where the plugin loads
+	 *
+	 * @param string $context The context.
+	 *
+	 * @return void
+	 */
+	public static function listen( string $context ): void {
+		$context = sanitize_key( $context );
+
+		if ( '' !== $context ) {
+			self::hook( $context );
+		}
+	}
+
+	/**
 	 * The messages waiting for a user, oldest first.
 	 *
 	 * @param string $context The context.

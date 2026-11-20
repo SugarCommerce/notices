@@ -406,6 +406,28 @@ final class NoticesTest extends TestCase {
 	}
 
 	/**
+	 * A context that only flashes is shown on the next screen once it
+	 * listens: admin_notices prints what waits, and nothing else is needed.
+	 */
+	public function test_a_listening_context_prints_what_was_flashed(): void {
+		Notices::flash( 'myplugin', 'Imported.' );
+
+		// The next request: nothing attached until the context listens.
+		( new \ReflectionProperty( Notices::class, 'hooked' ) )->setValue( null, [] );
+		$GLOBALS['notices_hooks'] = [];
+
+		Notices::listen( 'my plugin' );
+		Notices::listen( '' );
+
+		ob_start();
+		do_action( 'admin_notices' );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Imported.', $html );
+		$this->assertCount( 1, $GLOBALS['notices_hooks']['admin_notices'] );
+	}
+
+	/**
 	 * Flashed messages wait in order, with their types, and briefly.
 	 */
 	public function test_flashed_messages_keep_their_order_and_type(): void {
