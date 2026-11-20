@@ -151,29 +151,89 @@ if ( ! function_exists( 'delete_transient' ) ) {
 	}
 }
 
-if ( ! function_exists( 'check_ajax_referer' ) ) {
-	function check_ajax_referer( $action = -1, $query_arg = false, $stop = true ) {
-		if ( ( $_POST['_wpnonce'] ?? '' ) !== 'nonce-' . $action ) {
-			wp_die( '-1', '', [ 'response' => 403 ] );
+if ( ! function_exists( 'register_rest_route' ) ) {
+	function register_rest_route( $route_namespace, $route, $args = [] ) {
+		$GLOBALS['notices_routes'][ $route_namespace . $route ] = $args;
+
+		return true;
+	}
+}
+
+if ( ! function_exists( 'wp_hash' ) ) {
+	function wp_hash( $data, $scheme = 'auth' ) {
+		return hash_hmac( 'md5', (string) $data, 'test-salt-' . $scheme );
+	}
+}
+
+if ( ! function_exists( 'is_user_logged_in' ) ) {
+	function is_user_logged_in() {
+		return 0 !== (int) ( $GLOBALS['notices_user'] ?? 0 );
+	}
+}
+
+if ( ! function_exists( 'wp_enqueue_script' ) ) {
+	function wp_enqueue_script( $handle ) {
+		$GLOBALS['notices_scripts'][ $handle ] = $GLOBALS['notices_scripts'][ $handle ] ?? [];
+	}
+}
+
+if ( ! function_exists( 'wp_add_inline_script' ) ) {
+	function wp_add_inline_script( $handle, $data, $position = 'after' ) {
+		$GLOBALS['notices_scripts'][ $handle ][] = $data;
+
+		return true;
+	}
+}
+
+if ( ! class_exists( 'WP_REST_Request' ) ) {
+	/**
+	 * The parameters of a request, which is all the route reads.
+	 */
+	class WP_REST_Request implements ArrayAccess {
+
+		public function __construct( private array $params = [] ) {}
+
+		public function get_param( $key ) {
+			return $this->params[ $key ] ?? null;
 		}
 
-		return 1;
+		public function offsetExists( $offset ): bool {
+			return isset( $this->params[ $offset ] );
+		}
+
+		public function offsetGet( $offset ): mixed {
+			return $this->params[ $offset ] ?? null;
+		}
+
+		public function offsetSet( $offset, $value ): void {
+			$this->params[ $offset ] = $value;
+		}
+
+		public function offsetUnset( $offset ): void {
+			unset( $this->params[ $offset ] );
+		}
 	}
 }
 
-/**
- * What wp_die() was called with, thrown so the handler stops where core's would.
- */
-final class Notices_Died extends RuntimeException {
+if ( ! class_exists( 'WP_REST_Response' ) ) {
+	class WP_REST_Response {
 
-	public function __construct( public string $body, public int $status ) {
-		parent::__construct( $body );
+		public function __construct( public mixed $data = null, public int $status = 200 ) {}
+
+		public function get_data() {
+			return $this->data;
+		}
 	}
 }
 
-if ( ! function_exists( 'wp_die' ) ) {
-	function wp_die( $message = '', $title = '', $args = [] ) {
-		throw new Notices_Died( (string) $message, (int) ( $args['response'] ?? 200 ) );
+if ( ! class_exists( 'WP_Error' ) ) {
+	class WP_Error {
+
+		public function __construct( public string $code = '', public string $message = '', public mixed $data = '' ) {}
+
+		public function get_error_code() {
+			return $this->code;
+		}
 	}
 }
 
@@ -196,6 +256,8 @@ function notices_reset_globals(): void {
 	$GLOBALS['notices_caps']   = null;
 
 	$GLOBALS['notices_transients'] = [];
+	$GLOBALS['notices_routes']     = [];
+	$GLOBALS['notices_scripts']    = [];
 
 	$_GET  = [];
 	$_POST = [];
@@ -203,6 +265,8 @@ function notices_reset_globals(): void {
 	foreach ( [ 'notices', 'hooked' ] as $property ) {
 		( new ReflectionProperty( 'SugarCommerce\Notices\Notices', $property ) )->setValue( null, [] );
 	}
+
+	( new ReflectionProperty( 'SugarCommerce\Notices\Notices', 'routed' ) )->setValue( null, false );
 }
 
 if ( ! function_exists( 'apply_filters' ) ) {

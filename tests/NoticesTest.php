@@ -11,6 +11,8 @@ namespace SugarCommerce\Notices\Tests;
 
 use SugarCommerce\Notices\Notices;
 use PHPUnit\Framework\TestCase;
+use WP_Error;
+use WP_REST_Request;
 
 /**
  * Admin notices, and the two things around them that are not three lines.
@@ -64,7 +66,7 @@ final class NoticesTest extends TestCase {
 		$this->add();
 
 		$this->assertArrayHasKey( 'admin_notices', $GLOBALS['notices_hooks'] );
-		$this->assertArrayHasKey( 'wp_ajax_dismiss_notice_myplugin', $GLOBALS['notices_hooks'] );
+		$this->assertArrayHasKey( 'rest_api_init', $GLOBALS['notices_hooks'] );
 	}
 
 	/**
@@ -270,12 +272,18 @@ final class NoticesTest extends TestCase {
 	public function test_the_script_is_only_printed_when_it_is_needed(): void {
 		$this->add( [ 'persistent' => true, 'dismissible' => false ] );
 
-		$this->assertStringNotContainsString( '<script', $this->render() );
+		$this->render();
+
+		$this->assertSame( [], $GLOBALS['notices_scripts'] );
 
 		notices_reset_globals();
 		$this->add( [ 'persistent' => true ] );
+		$this->render();
 
-		$this->assertStringContainsString( '<script', $this->render() );
+		$script = implode( '', $GLOBALS['notices_scripts']['wp-api-fetch'] ?? [] );
+
+		$this->assertStringContainsString( 'wp.apiFetch', $script );
+		$this->assertStringContainsString( '"\/sugarcommerce-notices\/v1\/dismiss"', $script );
 	}
 
 	/**
@@ -463,67 +471,93 @@ final class NoticesTest extends TestCase {
 	}
 
 	/**
-	 * Dismissing a persistent notice is remembered for that user.
+	 * The dismiss route: signed in, one per copy, a context and a key.
 	 */
-	public function test_dismissing_a_persistent_notice_is_remembered(): void {
+	public function test_the_dismiss_route_is_registered_once(): void {
+		$this->add( [ 'persistent' => true ] );
+		Notices::add( 'other', 'saved', [ 'message' => 'Saved.' ] );
+
+		$this->assertCount( 1, $GLOBALS['notices_hooks']['rest_api_init'] );
+
+		Notices::boot();
+		Notices::register_routes();
+
+		$route = $GLOBALS['notices_routes']['sugarcommerce-notices/v1/dismiss'];
+
+		$this->assertSame( 'POST', $route['methods'] );
+		$this->assertTrue( $route['args']['context']['required'] );
+		$this->assertTrue( $route['args']['key']['required'] );
+		$this->assertTrue( $route['args']['token']['required'] );
+		$this->assertTrue( ( $route['permission_callback'] )() );
+
+		$GLOBALS['notices_user'] = 0;
+
+		$this->assertFalse( ( $route['permission_callback'] )() );
+	}
+
+	/**
+	 * A remembered notice is drawn with its token, and a dismissal over REST
+	 * that carries it is remembered for that user -- with no notice
+	 * registered on the REST request itself.
+	 */
+	public function test_a_dismissal_over_rest_is_remembered(): void {
 		$this->add( [ 'persistent' => true ] );
 
-		$this->assertSame( [ 1, '1' ], $this->dismiss( 'saved' ) );
-		$this->assertTrue( Notices::dismissed( 'myplugin', 'saved' ) );
+		preg_match( '/data-notice-token="([^"]+)"/', $this->render(), $match );
+
+		$this->assertNotEmpty( $match[1] ?? '' );
+
+		notices_reset_globals();
+
+		$response = Notices::rest_dismiss( new WP_REST_Request( [ 'context' => 'myplugin', 'key' => 'saved', 'token' => $match[1] ] ) );
+
+		$this->assertSame( [ 'dismissed' => true ], $response->get_data() );
+		$this->assertArrayHasKey( '_dismissed_notice_myplugin_saved', $GLOBALS['notices_meta'][1] );
 	}
 
 	/**
-	 * Dismissing a triggered notice succeeds and writes nothing.
+	 * A key with no token, another key's token or another user's is refused:
+	 * no meta for notices that were never shown.
 	 */
-	public function test_dismissing_a_triggered_notice_writes_nothing(): void {
-		$this->add();
-
-		$this->assertSame( [ 200, '1' ], $this->dismiss( 'saved' ) );
-		$this->assertSame( [], $GLOBALS['notices_meta'] );
-	}
-
-	/**
-	 * A key nobody registered is refused, so nobody can fill user meta with them.
-	 */
-	public function test_dismissing_an_unknown_key_is_refused(): void {
+	public function test_a_dismissal_without_its_token_is_refused(): void {
 		$this->add( [ 'persistent' => true ] );
 
-		$this->assertSame( [ 400, '0' ], $this->dismiss( 'made_up' ) );
-		$this->assertSame( [], $GLOBALS['notices_meta'] );
-	}
+		preg_match( '/data-notice-token="([^"]+)"/', $this->render(), $match );
 
-	/**
-	 * A dismissal without the nonce is refused.
-	 */
-	public function test_dismissing_needs_the_nonce(): void {
-		$this->add( [ 'persistent' => true ] );
+		foreach ( [ [ 'made_up', $match[1] ], [ 'saved', '' ], [ 'saved', 'forged' ] ] as [ $key, $token ] ) {
+			$response = Notices::rest_dismiss( new WP_REST_Request( [ 'context' => 'myplugin', 'key' => $key, 'token' => $token ] ) );
 
-		$this->assertSame( [ 403, '-1' ], $this->dismiss( 'saved', 'wrong' ) );
-		$this->assertSame( [], $GLOBALS['notices_meta'] );
-	}
-
-	/**
-	 * Post a dismissal and report how it ended.
-	 *
-	 * @param string $key   The notice's key.
-	 * @param string $nonce The nonce sent.
-	 *
-	 * @return array{0: int, 1: string} The status and body, status 1 for a stored dismissal.
-	 */
-	private function dismiss( string $key, string $nonce = 'nonce-dismiss_notice_myplugin' ): array {
-		$_POST = [
-			'key'      => $key,
-			'_wpnonce' => $nonce,
-		];
-
-		try {
-			Notices::dismiss( 'myplugin' );
-		} catch ( \Notices_Died $died ) {
-			$stored = '' !== (string) ( $GLOBALS['notices_meta'][1]['_dismissed_notice_myplugin_' . $key] ?? '' );
-
-			return [ $stored ? 1 : $died->status, $died->body ];
+			$this->assertInstanceOf( WP_Error::class, $response );
 		}
 
-		return [ 0, '' ];
+		$GLOBALS['notices_user'] = 2;
+
+		$this->assertInstanceOf( WP_Error::class, Notices::rest_dismiss( new WP_REST_Request( [ 'context' => 'myplugin', 'key' => 'saved', 'token' => $match[1] ] ) ) );
+		$this->assertSame( [], array_filter( $GLOBALS['notices_meta'] ) );
+	}
+
+	/**
+	 * A triggered notice has no token: its X only hides it.
+	 */
+	public function test_a_triggered_notice_has_no_token(): void {
+		$this->add();
+		$_GET['myplugin_notice'] = 'saved';
+
+		$html = $this->render();
+
+		$this->assertStringContainsString( 'data-notice-key="saved"', $html );
+		$this->assertStringNotContainsString( 'data-notice-token', $html );
+		$this->assertTrue( Notices::dismiss( 'myplugin', 'saved' ) );
+		$this->assertSame( [], $GLOBALS['notices_meta'][1] ?? [] );
+	}
+
+	/**
+	 * A notice nobody registered cannot be dismissed from PHP either.
+	 */
+	public function test_an_unknown_notice_is_refused(): void {
+		$this->add( [ 'persistent' => true ] );
+
+		$this->assertFalse( Notices::dismiss( 'myplugin', 'made_up' ) );
+		$this->assertSame( [], $GLOBALS['notices_meta'][1] ?? [] );
 	}
 }

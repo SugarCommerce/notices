@@ -35,7 +35,7 @@ use SugarCommerce\Notices\Traits\Notices\Rendering;
  *   one people learn to ignore.
  *
  * - **Two plugins on one site.** Everything is named from the context the
- *   plugin passes -- the query argument, the AJAX action, the user meta,
+ *   plugin passes -- the query argument, the user meta,
  *   the transient -- so two plugins that bundle this library, each with a
  *   `settings_saved`, never show each other's.
  *
@@ -84,6 +84,13 @@ final class Notices {
 	 * @var array<string, bool>
 	 */
 	private static array $hooked = [];
+
+	/**
+	 * Whether the dismiss route is hooked.
+	 *
+	 * @var bool
+	 */
+	private static bool $routed = false;
 
 	/**
 	 * Register a plugin's notices.
@@ -230,7 +237,9 @@ final class Notices {
 		self::$hooked[ $context ] = true;
 
 		add_action( 'admin_notices', static fn() => self::render( $context ) );
-		add_action( 'wp_ajax_dismiss_notice_' . $context, static fn() => self::dismiss( $context ) );
+
+		// One route for every context, registered once per copy.
+		self::boot();
 
 		// The trigger is taken back out of the URL once the page has
 		// loaded, the way core does for its own `message` and `updated`, so

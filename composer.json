@@ -18,7 +18,8 @@
     "flash"
   ],
   "require": {
-    "php": ">=8.3"
+    "php": ">=8.3",
+    "sugarcommerce/plugin": "dev-main"
   },
   "require-dev": {
     "phpcompatibility/phpcompatibility-wp": "^2.1",
@@ -26,6 +27,15 @@
     "squizlabs/php_codesniffer": "^3.13.5",
     "wp-coding-standards/wpcs": "^3.4"
   },
+  "repositories": [
+    {
+      "type": "path",
+      "url": "../plugin",
+      "options": {
+        "symlink": false
+      }
+    }
+  ],
   "autoload": {
     "psr-4": {
       "SugarCommerce\\Notices\\": "src/"

@@ -37,6 +37,8 @@ composer require sugarcommerce/notices
 ```php
 use SugarCommerce\Notices\Notices;
 
+Notices::boot(); // the dismiss route, on every request
+
 add_action( 'admin_init', function () {
 	Notices::register( 'myplugin', [
 		'settings_saved' => [
@@ -72,7 +74,10 @@ again.
 A **persistent** notice is a condition that is true until it is not. It
 shows whenever its `capability`, `screens` and `condition` all allow, until
 the user dismisses it -- and that is remembered, per user, in user meta
-`_dismissed_notice_{context}_{key}`.
+`_dismissed_notice_{context}_{key}`. The X sends the dismissal to a REST
+route with core's apiFetch; notices declared on `admin_init` are never
+declared on a REST request, so call `Notices::boot()` once where the plugin
+loads for the route to answer there.
 
 | Key | Default | |
 |---|---|---|
@@ -112,15 +117,17 @@ left, ten at most.
 ## Two plugins on one site
 
 Everything is named from the context: the trigger argument
-(`{context}_notice`), the AJAX action (`dismiss_notice_{context}`), the user
-meta and the transient. Two plugins that each bundle this library and each
+(`{context}_notice`), the user meta and the transient; the dismiss route is
+named from the copy's own namespace (`sugarcommerce-notices/v1/dismiss`, with
+a prefix in a bundled build). Two plugins that each bundle this library and each
 have a `settings_saved` never show each other's.
 
 ## Security
 
-* Forged dismissals: the dismiss request checks its nonce, and only a
-  registered, dismissible notice can be dismissed -- per user, so no request
-  writes meta it was not meant to.
+* Forged dismissals: dismissing goes through a REST route for signed-in
+  users, sent with core's `wp_rest` nonce, and only with the token the
+  notice was drawn with for that user, checked with `hash_equals()` -- so no
+  request writes meta for a notice it was never shown.
 * Script in a message: every message goes through `wp_admin_notice()`, which
   runs it through `wp_kses_post()`; the dismiss script's context is a key.
 * Showing a notice by address: the trigger argument can only pick a notice

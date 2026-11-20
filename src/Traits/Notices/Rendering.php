@@ -86,9 +86,18 @@ trait Rendering {
 				continue;
 			}
 
-			self::print( $context, $key, (string) $config['type'], (bool) $config['dismissible'], (string) $config['message'] );
+			$remembered = (bool) $config['persistent'] && (bool) $config['dismissible'];
 
-			$remember = $remember || ( (bool) $config['persistent'] && (bool) $config['dismissible'] );
+			self::print(
+				$context,
+				$key,
+				(string) $config['type'],
+				(bool) $config['dismissible'],
+				(string) $config['message'],
+				$remembered && 0 !== $user_id ? self::token( $context, $key, $user_id ) : ''
+			);
+
+			$remember = $remember || $remembered;
 		}
 
 		// Only when there is something to remember: a persistent notice
@@ -119,14 +128,20 @@ trait Rendering {
 	 * @param string $type        Its type.
 	 * @param bool   $dismissible Whether it has an X.
 	 * @param string $message     Its HTML.
+	 * @param string $token       What the dismiss route asks for, for a
+	 *                            dismissal that is remembered.
 	 *
 	 * @return void
 	 */
-	private static function print( string $context, string $key, string $type, bool $dismissible, string $message ): void {
+	private static function print( string $context, string $key, string $type, bool $dismissible, string $message, string $token = '' ): void {
 		$attributes = array( 'data-notice-context' => $context );
 
 		if ( '' !== $key ) {
 			$attributes['data-notice-key'] = $key;
+		}
+
+		if ( '' !== $token ) {
+			$attributes['data-notice-token'] = $token;
 		}
 
 		// Core's markup, escaping and wp_kses_post(), and its
